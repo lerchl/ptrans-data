@@ -1,0 +1,11 @@
+CREATE TABLE IF NOT EXISTS lios (
+    id CHAR(36) PRIMARY KEY,
+    provider VARCHAR(255) NOT NULL,
+    station VARCHAR(255) NOT NULL,
+    line VARCHAR(255) NOT NULL,
+    direction VARCHAR(255) NOT NULL
+);
+
+CREATE USER IF NOT EXISTS 'app'@'%' IDENTIFIED BY 'app_password';
+GRANT ALL PRIVILEGES ON ptrans.* TO 'app'@'%';
+FLUSH PRIVILEGES;
