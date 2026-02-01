@@ -9,7 +9,7 @@ pub struct StationCsvRow {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct ApiResponse {
+pub struct MonitorResponse {
     pub data: Data,
     // pub message: Message,
 }
@@ -26,7 +26,7 @@ pub struct Data {
 //     pub serverTime: String,
 // }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct Monitor {
     // pub locationStop: LocationStop,
     pub lines: Vec<Line>,
@@ -65,38 +65,38 @@ pub struct Monitor {
 //     pub rbl: i32,
 // }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct Line {
     pub name: String,
     pub towards: String,
-    #[serde(rename = "realtimeSupported")]
-    pub realtime_supported: bool,
-    pub trafficjam: bool,
+    // #[serde(rename = "realtimeSupported")]
+    // pub realtime_supported: bool,
+    // pub trafficjam: bool,
     pub departures: Departures,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct Departures {
     pub departure: Vec<Departure>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct Departure {
     #[serde(rename = "departureTime")]
     pub departure_time: DepartureTime,
-    pub vehicle: Option<Vehicle>,
+    pub vehicle: Vehicle,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct DepartureTime {
     #[serde(rename = "timePlanned")]
     pub time_planned: String,
     #[serde(rename = "timeReal")]
-    pub time_real: String,
+    pub time_real: Option<String>,
     pub countdown: i32,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct Vehicle {
     pub name: String,
     pub towards: String,

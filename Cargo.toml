@@ -22,3 +22,5 @@ sqlx = { version = "0.8.6", features = [
 dotenvy = "0.15.7"
 reqwest = { version = "0.13.1", features = ["json", "blocking", "rustls"] }
 csv = "1.4.0"
+chrono = "0.4.43"
+regex = "1.12.2"

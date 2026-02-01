@@ -8,11 +8,9 @@ pub struct Station {
 }
 
 #[derive(Debug, Clone, FromRow)]
-pub struct Lio {
-   pub id: String,
-   pub provider: String,
-   pub provider_id: String,
-   pub station: String,
-   pub line: String,
-   pub direction: String,
+pub struct IntervalLio {
+    pub provider: String,
+    pub provider_id: String,
+    pub line: String,
+    pub direction: String,
 }

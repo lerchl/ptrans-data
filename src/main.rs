@@ -1,60 +1,27 @@
 mod dtos;
 mod models;
+mod services;
 
 use axum::{
-    BoxError, Json, Router,
+    BoxError, Router,
     error_handling::HandleErrorLayer,
-    extract::{Path, State},
     http::StatusCode,
     routing::{delete, get},
 };
-use csv::ReaderBuilder;
 use dotenvy::dotenv;
-use reqwest::Client;
-use serde::Serialize;
-use sqlx::MySqlPool;
+use sqlx::{MySql, MySqlPool, Pool};
 use std::{env, time::Duration};
 use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-use uuid::Uuid;
 
 use crate::{
-    dtos::internal::{LioCreateDto, LioViewDto},
-    models::{
-        internal::{Lio, Station},
-        wl::{ApiResponse, Monitor, StationCsvRow},
+    models::internal::{IntervalLio, Station},
+    services::{
+        internal::{create_lio, delete_lio, get_lio, get_timetable},
+        oebb, wl,
     },
 };
-
-async fn fetch_and_parse_csv(url: &str) -> Result<Vec<Station>, Box<dyn std::error::Error>> {
-    // Fetch CSV as string
-    let resp = Client::new().get(url).send().await?.text().await?;
-
-    // Create CSV reader
-    let mut rdr = ReaderBuilder::new()
-        .has_headers(true)
-        .delimiter(b';')
-        .from_reader(resp.as_bytes());
-
-    // Deserialize into Vec<LioCsvRow>
-    let mut rows = Vec::new();
-    for result in rdr.deserialize() {
-        let row: StationCsvRow = result?;
-        rows.push(Station {
-            id: row.diva,
-            name: row.platform_text,
-            provider: "Wiener Linien".to_string(),
-        });
-    }
-
-    Ok(rows)
-}
-
-#[derive(Clone, Debug, Serialize)]
-struct ErrorBody {
-    message: String,
-}
 
 #[derive(Clone)]
 struct AppState {
@@ -62,167 +29,54 @@ struct AppState {
     stations: Vec<Station>,
 }
 
-async fn get_lio(State(app_state): State<AppState>) -> Result<Json<Vec<LioViewDto>>, StatusCode> {
-    let lios = sqlx::query_as::<_, LioViewDto>("SELECT id, provider, station, line, direction FROM lios")
-        .fetch_all(&app_state.pool)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+/// Fetches the timetable for all LIOs in the database and prints them to the console.
+async fn get_and_print_timetable(pool: &Pool<MySql>) -> Result<(), Box<dyn std::error::Error>> {
+    let lios =
+        sqlx::query_as::<_, IntervalLio>("SELECT provider, provider_id, line, direction FROM lios")
+            .fetch_all(pool)
+            .await?;
 
-    Ok(Json(lios))
-}
-async fn create_lio(
-    State(app_state): State<AppState>,
-    Json(input): Json<LioCreateDto>,
-) -> Result<(StatusCode, Json<LioViewDto>), (StatusCode, Json<ErrorBody>)> {
-    let found_stations = app_state
-        .stations
+    let wl_lios = lios
         .iter()
-        .filter(|s| {
-            s.name
-                .to_lowercase()
-                .contains(&input.station.to_lowercase())
-                && s.provider == input.provider
-        })
-        .collect::<Vec<&Station>>();
-
-    if found_stations.len() == 0 {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(ErrorBody {
-                message: format!(
-                    "Station '{}' with provider '{}' not found.",
-                    input.station, input.provider
-                ),
-            }),
-        ));
-    } else if found_stations.len() > 1 {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(ErrorBody {
-                message: format!(
-                    "Multiple stations found matching '{}' with provider '{}'. Please be more specific.",
-                    input.station, input.provider
-                ),
-            }),
-        ));
-    }
-
-    let station = found_stations[0];
-
-    let resp = Client::new()
-        .get(format!(
-            "https://www.wienerlinien.at/ogd_realtime/monitor?diva={}",
-            station.id
-        ))
-        .send()
-        .await
-        .map_err(|_| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    message: "Failed to fetch data from Wiener Linien API.".to_string(),
-                }),
-            )
-        })?
-        .json::<ApiResponse>()
-        .await
-        .map_err(|_| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    message: "Failed to parse response from Wiener Linien API.".to_string(),
-                }),
-            )
-        })?;
-
-    let lines = resp
-        .data
-        .monitors
+        .filter(|lio| lio.provider.as_str() == "Wiener Linien")
+        .collect::<Vec<&IntervalLio>>();
+    let divas = wl_lios
         .iter()
-        .filter(|monitor| {
-            monitor.lines.iter().any(|line| {
-                line.name.to_lowercase() == input.line.to_lowercase()
-                    && line
-                        .towards
-                        .to_lowercase()
-                        .contains(&input.direction.to_lowercase())
-            })
-        })
-        .collect::<Vec<&Monitor>>();
+        .map(|lio| lio.provider_id.clone())
+        .collect::<Vec<String>>();
 
-    if lines.len() == 0 {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(ErrorBody {
-                message: format!(
-                    "Line '{}' with direction '{}' not found at station '{}'.",
-                    input.line, input.direction, station.name
-                ),
-            }),
-        ));
+    let oebb_lios = lios
+        .iter()
+        .filter(|lio| lio.provider.as_str() == "OEBB")
+        .collect::<Vec<&IntervalLio>>();
+    let oebb_ids = oebb_lios
+        .iter()
+        .map(|lio| lio.provider_id.clone())
+        .collect::<Vec<String>>();
+
+    let wl_result = wl::fetch_monitors(divas).await?;
+    let oebb_result = oebb::fetch_depatures_for_stations(oebb_ids).await?;
+
+    println!("--- Timetable Update ---");
+    for line in [
+        wl::format_monitors_plain(&wl::filter_monitors_for_lios(
+            &wl_result.data.monitors,
+            &wl_lios,
+        )),
+        oebb::format_departures_plain(&oebb::filter_departures_for_lios(&oebb_result, &oebb_lios)),
+    ]
+    .concat()
+    {
+        println!("{line}");
     }
+    println!("------------------------\n");
 
-    println!("{}, {}", lines[0].lines[0].name, lines[0].lines[0].towards);
-
-    let id = Uuid::new_v4().to_string();
-
-    sqlx::query!(
-        r#"
-        INSERT INTO lios (id, provider, provider_id, station, line, direction)
-        VALUES (?, ?, ?, ?, ?, ?)
-        "#,
-        id,
-        input.provider,
-        station.id,
-        input.station,
-        input.line,
-        input.direction
-    )
-    .execute(&app_state.pool)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR);
-
-    Ok((
-        StatusCode::CREATED,
-        Json(LioViewDto {
-            id,
-            provider: input.provider,
-            station: input.station,
-            line: input.line,
-            direction: input.direction,
-        }),
-    ))
+    Ok(())
 }
 
-async fn delete_lio(
-    State(app_state): State<AppState>,
-    Path(id): Path<String>,
-) -> Result<StatusCode, StatusCode> {
-    let res = sqlx::query!("DELETE FROM lios WHERE id = ?", id)
-        .execute(&app_state.pool)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    if res.rows_affected() == 0 {
-        return Err(StatusCode::NOT_FOUND);
-    }
-
-    Ok(StatusCode::NO_CONTENT)
-}
 #[tokio::main]
 async fn main() {
-    let stations = fetch_and_parse_csv(
-        "https://www.wienerlinien.at/ogd_realtime/doku/ogd/wienerlinien-ogd-haltestellen.csv",
-    )
-    .await
-    .expect("Failed to fetch or parse CSV");
-
-    stations.iter().for_each(|station| {
-        println!(
-            "Station ID: {}, Name: {}, Provider: {}",
-            station.id, station.name, station.provider
-        );
-    });
+    let stations = wl::get_stations().await.unwrap();
 
     dotenv().ok();
 
@@ -231,6 +85,16 @@ async fn main() {
     let pool = MySqlPool::connect(&database_url)
         .await
         .expect("Failed to connect to MariaDB");
+
+    // let interval_pool = pool.clone();
+    // tokio::spawn(async move {
+    //     loop {
+    //         if let Err(e) = get_and_print_timetable(&interval_pool).await {
+    //             eprintln!("Error fetching timetable: {}", e);
+    //         }
+    //         tokio::time::sleep(Duration::from_secs(30)).await;
+    //     }
+    // });
 
     let state = AppState {
         pool: pool.clone(),
@@ -246,8 +110,8 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    // Compose the routes
     let app = Router::new()
+        .route("/timetable", get(get_timetable))
         .route("/lio", get(get_lio).post(create_lio))
         .route("/lio/{id}", delete(delete_lio))
         // Add middleware to all routes
@@ -263,7 +127,7 @@ async fn main() {
                         ))
                     }
                 }))
-                .timeout(Duration::from_secs(10))
+                .timeout(Duration::from_secs(60))
                 .layer(TraceLayer::new_for_http())
                 .into_inner(),
         )
