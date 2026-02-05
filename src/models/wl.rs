@@ -84,7 +84,7 @@ pub struct Departures {
 pub struct Departure {
     #[serde(rename = "departureTime")]
     pub departure_time: DepartureTime,
-    pub vehicle: Vehicle,
+    pub vehicle: Option<Vehicle>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -102,5 +102,6 @@ pub struct Vehicle {
     pub towards: String,
     #[serde(rename = "realtimeSupported")]
     pub realtime_supported: bool,
-    pub trafficjam: bool,
+    #[serde(rename = "trafficjam")]
+    pub traffic_jam: bool,
 }

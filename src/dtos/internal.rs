@@ -39,8 +39,9 @@ pub struct TripDto {
 
 #[derive(Clone, Debug, Serialize)]
 pub struct DepartureDto {
-    pub direction: String,
-    pub when: String,
-    pub when_actually: Option<String>,
+    pub direction: Option<String>,
+    pub countdown: i32,
+    pub real_time: bool,
+    pub late: bool,
     pub traffic_jam: bool
 }

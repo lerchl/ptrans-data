@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use csv::ReaderBuilder;
 use reqwest::Client;
 
@@ -5,7 +6,7 @@ use crate::{
     dtos::internal::{DepartureDto, TripDto},
     models::{
         internal::{IntervalLio, Station},
-        wl::{Line, Monitor, MonitorResponse, StationCsvRow},
+        wl::{Departure, Line, Monitor, MonitorResponse, StationCsvRow},
     },
 };
 
@@ -83,7 +84,7 @@ pub async fn fetch_trips_for_lios(
     Ok(lios
         .iter()
         .map(|lio| (*lio, find_line_matching_lio(&lines, lio)))
-        .map(|pair| lio_line_pair_to_trip(&pair))
+        .map(|pair| lio_line_pair_to_trip_dto(&pair))
         .collect::<Vec<TripDto>>())
 }
 
@@ -105,7 +106,7 @@ fn find_line_matching_lio<'a>(lines: &'a Vec<&Line>, lio: &'a IntervalLio) -> Op
         .map(|line| *line)
 }
 
-fn lio_line_pair_to_trip(pair: &(&IntervalLio, Option<&Line>)) -> TripDto {
+fn lio_line_pair_to_trip_dto(pair: &(&IntervalLio, Option<&Line>)) -> TripDto {
     let (lio, line) = pair;
 
     TripDto {
@@ -116,14 +117,44 @@ fn lio_line_pair_to_trip(pair: &(&IntervalLio, Option<&Line>)) -> TripDto {
             l.departures
                 .departure
                 .iter()
-                .map(|d| DepartureDto {
-                    direction: d.vehicle.towards.clone(),
-                    when: d.departure_time.time_planned.clone(),
-                    when_actually: d.departure_time.time_real.clone(),
-                    traffic_jam: d.vehicle.trafficjam,
-                })
+                .map(|d| line_departure_to_departure_dto(d))
                 .collect::<Vec<DepartureDto>>()
         }),
+    }
+}
+
+fn line_departure_to_departure_dto(d: &Departure) -> DepartureDto {
+    let real_time = d
+        .clone()
+        .vehicle
+        .map(|v| v.realtime_supported)
+        .unwrap_or(false);
+
+    let late = if !real_time {
+        false
+    } else {
+        d.clone()
+            .departure_time
+            .time_real
+            .map(|tr| {
+                let time_real = tr.parse::<DateTime<Utc>>().unwrap();
+                let time_planned = d
+                    .departure_time
+                    .time_planned
+                    .parse::<DateTime<Utc>>()
+                    .unwrap();
+
+                time_real > time_planned
+            })
+            .unwrap_or(false)
+    };
+
+    DepartureDto {
+        direction: d.clone().vehicle.map(|v| v.towards.trim().to_string()),
+        countdown: d.departure_time.countdown,
+        real_time: real_time,
+        late: late,
+        traffic_jam: d.clone().vehicle.map(|v| v.traffic_jam).unwrap_or(false),
     }
 }
 
