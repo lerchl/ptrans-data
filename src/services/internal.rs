@@ -311,10 +311,12 @@ pub async fn get_timetable(
     //     .filter(|lio| lio.provider.as_str() == "OEBB")
     //     .collect::<Vec<&IntervalLio>>();
 
-    let wl_trips = wl::fetch_trips_for_lios(&wl_lios).await.map_err(|e| {
+    let mut wl_trips = wl::fetch_trips_for_lios(&wl_lios).await.map_err(|e| {
         eprintln!("{:?}", e);
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
+
+    wl_trips.sort_by(|t1, t2| t1.departures[0].countdown.cmp(&t2.departures[0].countdown));
 
     Ok((
         StatusCode::OK,
