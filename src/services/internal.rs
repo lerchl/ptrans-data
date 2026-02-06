@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::{
     AppState,
-    dtos::internal::{ErrorDto, LioCreateDto, LioViewDto, TimetableDto},
+    dtos::internal::{ErrorDto, LioCreateDto, LioViewDto, TimetableDto, TripDto},
     models::{
         internal::{IntervalLio, Station},
         oebb::Departure,
@@ -306,22 +306,32 @@ pub async fn get_timetable(
         .filter(|lio| lio.provider.as_str() == "Wiener Linien")
         .collect::<Vec<&IntervalLio>>();
 
-    // let oebb_lios = lios
-    //     .iter()
-    //     .filter(|lio| lio.provider.as_str() == "OEBB")
-    //     .collect::<Vec<&IntervalLio>>();
+    let oebb_lios = lios
+        .iter()
+        .filter(|lio| lio.provider.as_str() == "OEBB")
+        .collect::<Vec<&IntervalLio>>();
 
-    let mut wl_trips = wl::fetch_trips_for_lios(&wl_lios).await.map_err(|e| {
-        eprintln!("{:?}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let mut trips = [
+        wl::fetch_trips_for_lios(&wl_lios).await.map_err(|e| {
+            eprintln!("{:?}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?,
+        oebb::fetch_trips_for_lios(&oebb_lios).await.map_err(|e| {
+            eprintln!("{:?}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?,
+    ]
+    .iter()
+    .flatten()
+    .cloned()
+    .collect::<Vec<TripDto>>();
 
-    wl_trips.sort_by(|t1, t2| t1.departures[0].countdown.cmp(&t2.departures[0].countdown));
+    trips.sort_by(|t1, t2| t1.departures[0].countdown.cmp(&t2.departures[0].countdown));
 
     Ok((
         StatusCode::OK,
         Json(TimetableDto {
-            trips: wl_trips,
+            trips: trips,
             message: None,
         }),
     ))

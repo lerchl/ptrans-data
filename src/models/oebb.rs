@@ -15,11 +15,9 @@ pub struct Departures {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct Departure {
-    pub when: String,
-    // #[serde(rename = "plannedWhen")]
-    // pub planned_when: String,
-    /// delay in seconds
-    pub delay: Option<i32>,
+    pub when: Option<String>,
+    #[serde(rename = "plannedWhen")]
+    pub planned_when: String,
     pub direction: String,
     pub line: Line
 }
