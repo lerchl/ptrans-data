@@ -34,7 +34,13 @@ struct AppState {
 
 #[tokio::main]
 async fn main() {
-    let stations = wl::get_stations().await.unwrap();
+    let stations = match wl::get_stations().await {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("Failed to get stations: {e}");
+            Vec::new()
+        }
+    };
 
     dotenv().ok();
 
