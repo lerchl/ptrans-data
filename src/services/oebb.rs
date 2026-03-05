@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use itertools::Itertools;
 use reqwest::Client;
 
 use crate::{
@@ -31,37 +32,40 @@ pub async fn fetch_stations(name: String) -> Result<Vec<Station>, reqwest::Error
         .collect::<Vec<Station>>())
 }
 
-pub async fn fetch_trips_for_lios(
-    lios: &Vec<&IntervalLio>,
-) -> Result<Vec<TripDto>, Box<dyn std::error::Error>> {
+pub async fn fetch_trips_for_lios(lios: &Vec<&IntervalLio>) -> Vec<TripDto> {
     let ids = lios
         .iter()
         .map(|l| l.provider_id.clone())
+        .unique()
         .collect::<Vec<String>>();
 
-    let mut departures: Vec<Departure> = Vec::new();
+    let mut all_departures: Vec<Departure> = Vec::new();
+
     for id in ids {
-        Client::new()
+        let Ok(response) = Client::new()
             .get(format!(
                 "https://oebb.macistry.com/api/stops/{}/departures",
                 id
             ))
             .send()
-            .await?
-            .json::<Departures>()
-            .await?
-            .departures
-            .iter()
-            .for_each(|d| {
-                departures.push(d.clone());
-            });
+            .await
+        else {
+            continue;
+        };
+
+        let Ok(departures) = response.json::<Departures>().await else {
+            continue;
+        };
+
+        departures.departures.iter().for_each(|d| {
+            all_departures.push(d.clone());
+        })
     }
 
-    Ok(lios
-        .iter()
-        .map(|lio| (*lio, find_departures_matching_lio(&departures, lio)))
+    lios.iter()
+        .map(|lio| (*lio, find_departures_matching_lio(&all_departures, lio)))
         .map(|pair| lio_departures_pair_to_trip_dto(&pair))
-        .collect::<Vec<TripDto>>())
+        .collect::<Vec<TripDto>>()
 }
 
 pub async fn fetch_depatures_for_stations(
@@ -152,26 +156,4 @@ fn departure_to_departure_dto(departure: &Departure) -> DepartureDto {
         late: late,
         traffic_jam: false,
     }
-}
-
-pub fn filter_departures_for_lios(
-    departures: &Vec<Departure>,
-    lios: &Vec<&IntervalLio>,
-) -> Vec<Departure> {
-    departures
-        .iter()
-        .filter(|d| {
-            lios.iter().any(|l| {
-                d.line
-                    .name
-                    .replace(" ", "")
-                    .to_lowercase()
-                    .contains(&l.line.to_lowercase())
-                    && d.direction
-                        .to_lowercase()
-                        .contains(&l.direction.to_lowercase())
-            })
-        })
-        .cloned()
-        .collect::<Vec<Departure>>()
 }

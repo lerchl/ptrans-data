@@ -312,21 +312,25 @@ pub async fn get_timetable(
         .collect::<Vec<&IntervalLio>>();
 
     let mut trips = [
-        wl::fetch_trips_for_lios(&wl_lios).await.map_err(|e| {
-            eprintln!("{:?}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?,
-        oebb::fetch_trips_for_lios(&oebb_lios).await.map_err(|e| {
-            eprintln!("{:?}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?,
+        wl::fetch_trips_for_lios(&wl_lios).await,
+        oebb::fetch_trips_for_lios(&oebb_lios).await,
     ]
     .iter()
     .flatten()
     .cloned()
     .collect::<Vec<TripDto>>();
 
-    trips.sort_by(|t1, t2| t1.departures[0].countdown.cmp(&t2.departures[0].countdown));
+    trips.sort_by(|t1, t2| {
+        return if t1.departures.is_empty() && t2.departures.is_empty() {
+            std::cmp::Ordering::Equal
+        } else if t1.departures.is_empty() {
+            std::cmp::Ordering::Less
+        } else if t2.departures.is_empty() {
+            std::cmp::Ordering::Greater
+        } else {
+            t1.departures[0].countdown.cmp(&t2.departures[0].countdown)
+        };
+    });
 
     Ok((
         StatusCode::OK,

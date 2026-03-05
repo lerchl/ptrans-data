@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "DELETE FROM lios WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "37f9f985fc380e1a4d7268a554e4c28b56bd7af8483da47a9cfd2bda8e9caac8"
+}

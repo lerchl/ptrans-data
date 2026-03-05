@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "\n        INSERT INTO lios (id, provider, provider_id, station, line, direction)\n        VALUES (?, ?, ?, ?, ?, ?)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "a10b25253efe0bfab091bbc2aa6e71427fd11c6cb26386cb298d01e0ca1040ce"
+}

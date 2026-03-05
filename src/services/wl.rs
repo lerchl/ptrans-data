@@ -1,12 +1,13 @@
 use chrono::{DateTime, Utc};
 use csv::ReaderBuilder;
+use itertools::Itertools;
 use reqwest::Client;
 
 use crate::{
     dtos::internal::{DepartureDto, TripDto},
     models::{
         internal::{IntervalLio, Station},
-        wl::{Departure, Line, Monitor, MonitorResponse, StationCsvRow},
+        wl::{Data, Departure, Line, MonitorResponse, StationCsvRow},
     },
 };
 
@@ -36,29 +37,13 @@ pub async fn get_stations() -> Result<Vec<Station>, Box<dyn std::error::Error>> 
     Ok(rows)
 }
 
-pub async fn fetch_monitors(divas: Vec<String>) -> Result<MonitorResponse, reqwest::Error> {
-    let divas_param = divas.join(",");
-    let url = format!(
-        "https://www.wienerlinien.at/ogd_realtime/monitor?diva={}",
-        divas_param
-    );
-
-    let resp = Client::new()
-        .get(url)
-        .send()
-        .await?
-        .json::<MonitorResponse>()
-        .await?;
-
-    Ok(resp)
-}
-
 pub async fn fetch_trips_for_lios(
     lios: &Vec<&IntervalLio>,
-) -> Result<Vec<TripDto>, Box<dyn std::error::Error>> {
+) -> Vec<TripDto> {
     let divas = lios
         .iter()
         .map(|l| l.provider_id.clone())
+        .unique()
         .collect::<Vec<String>>()
         .join(",");
 
@@ -67,12 +52,17 @@ pub async fn fetch_trips_for_lios(
         divas
     );
 
-    let monitor_response = Client::new()
-        .get(url)
-        .send()
-        .await?
-        .json::<MonitorResponse>()
-        .await?;
+    let monitor_response = match Client::new().get(url).send().await {
+        Ok(response) => response
+            .json::<MonitorResponse>()
+            .await
+            .unwrap_or_else(|_| MonitorResponse {
+                data: Data { monitors: vec![] },
+            }),
+        Err(_) => MonitorResponse {
+            data: Data { monitors: vec![] },
+        },
+    };
 
     let lines = monitor_response
         .data
@@ -81,11 +71,10 @@ pub async fn fetch_trips_for_lios(
         .filter_map(|m| m.lines.first())
         .collect::<Vec<&Line>>();
 
-    Ok(lios
-        .iter()
+    lios.iter()
         .map(|lio| (*lio, find_line_matching_lio(&lines, lio)))
         .map(|pair| lio_line_pair_to_trip_dto(&pair))
-        .collect::<Vec<TripDto>>())
+        .collect::<Vec<TripDto>>()
 }
 
 fn find_line_matching_lio<'a>(lines: &'a Vec<&Line>, lio: &'a IntervalLio) -> Option<&'a Line> {
@@ -156,64 +145,4 @@ fn line_departure_to_departure_dto(d: &Departure) -> DepartureDto {
         late: late,
         traffic_jam: d.clone().vehicle.map(|v| v.traffic_jam).unwrap_or(false),
     }
-}
-
-// fn map_line_to_lio<'a>(
-//     lios: &'a Vec<&IntervalLio>,
-//     line: &'a Line,
-// ) -> Option<(&'a IntervalLio, &'a Line)> {
-//     lios.iter()
-//         .filter(|l| {
-//             line.name
-//                 .trim()
-//                 .to_lowercase()
-//                 .contains(&l.line.to_lowercase())
-//                 && line
-//                     .towards
-//                     .trim()
-//                     .to_lowercase()
-//                     .contains(&l.direction.to_lowercase())
-//         })
-//         .map(|l| (*l, line))
-//         .next()
-// }
-
-fn lios_target_line(lios: &Vec<&IntervalLio>, line: &Line) -> bool {
-    lios.iter().any(|l| {
-        line.name
-            .trim()
-            .to_lowercase()
-            .contains(&l.line.to_lowercase())
-            && line
-                .towards
-                .trim()
-                .to_lowercase()
-                .contains(&l.direction.to_lowercase())
-    })
-}
-
-pub fn filter_monitors_for_lios(monitors: &Vec<Monitor>, lios: &Vec<&IntervalLio>) -> Vec<Monitor> {
-    let is_line_targeted = |line: &Line| lios_target_line(lios, line);
-
-    monitors
-        .iter()
-        .filter(|m| m.lines.first().is_some_and(is_line_targeted))
-        .cloned()
-        .collect::<Vec<Monitor>>()
-}
-
-pub fn format_monitors_plain(monitors: &Vec<Monitor>) -> Vec<String> {
-    monitors
-        .iter()
-        .map(|m| {
-            format!(
-                "{:3} -> {:20} in {:3} minutes",
-                m.lines.first().unwrap().name.trim(),
-                m.lines.first().unwrap().towards.trim(),
-                m.lines.first().unwrap().departures.departure[0]
-                    .departure_time
-                    .countdown,
-            )
-        })
-        .collect::<Vec<String>>()
 }

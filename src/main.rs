@@ -12,7 +12,10 @@ use dotenvy::dotenv;
 use sqlx::MySqlPool;
 use std::{env, time::Duration};
 use tower::ServiceBuilder;
-use tower_http::trace::TraceLayer;
+use tower_http::{
+    cors::{Any, CorsLayer},
+    trace::TraceLayer,
+};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::{
@@ -55,11 +58,16 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(Any)
+        .allow_headers(Any);
+
     let app = Router::new()
         .route("/timetable", get(get_timetable))
         .route("/lio", get(get_lio).post(create_lio))
         .route("/lio/{id}", delete(delete_lio))
-        // Add middleware to all routes
+        .layer(cors)
         .layer(
             ServiceBuilder::new()
                 .layer(HandleErrorLayer::new(|error: BoxError| async move {
