@@ -34,6 +34,17 @@ struct AppState {
 
 #[tokio::main]
 async fn main() {
+    dotenv().ok();
+
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+                format!("{}=debug,tower_http=debug", env!("CARGO_CRATE_NAME")).into()
+            }),
+        )
+        .with(tracing_subscriber::fmt::layer())
+        .init();
+
     let stations = match wl::get_stations().await {
         Ok(s) => s,
         Err(e) => {
@@ -41,8 +52,6 @@ async fn main() {
             Vec::new()
         }
     };
-
-    dotenv().ok();
 
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
@@ -62,15 +71,6 @@ async fn main() {
         pool: pool.clone(),
         stations,
     };
-
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-                format!("{}=debug,tower_http=debug", env!("CARGO_CRATE_NAME")).into()
-            }),
-        )
-        .with(tracing_subscriber::fmt::layer())
-        .init();
 
     let cors = CorsLayer::new()
         .allow_origin(Any)
