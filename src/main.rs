@@ -50,6 +50,14 @@ async fn main() {
         .await
         .expect("Failed to connect to MariaDB");
 
+    sqlx::migrate!("./migrations")
+        .run(&pool)
+        .await
+        .unwrap_or_else(|e| {
+            tracing::error!("Failed to apply database migrations: {}", e);
+            panic!("Migration failed, shutting down");
+        });
+
     let state = AppState {
         pool: pool.clone(),
         stations,
