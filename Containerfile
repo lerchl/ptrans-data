@@ -13,13 +13,11 @@ COPY .sqlx ./.sqlx
 COPY src ./src
 RUN cargo build --release
 
-FROM docker.io/library/debian:bookworm-slim
+FROM docker.io/library/debian:bookworm
 
 RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
 ENV DATABASE_URL=""
 COPY --from=builder /app/target/release/ptrans-data /usr/local/bin/ptrans-data
-# RUN useradd -m appuser
-# USER appuser
 
 EXPOSE 3000
 CMD ["ptrans-data"]
