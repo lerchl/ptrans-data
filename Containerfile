@@ -1,7 +1,5 @@
 FROM docker.io/library/rust:1.93 AS builder
 
-RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
-
 ENV SQLX_OFFLINE=true
 WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
@@ -15,6 +13,11 @@ COPY .sqlx ./.sqlx
 COPY src ./src
 RUN cargo build --release
 
+FROM docker.io/library/debian:bookworm
+
+RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
 ENV DATABASE_URL=""
+COPY --from=builder /app/target/release/ptrans-data /usr/local/bin/ptrans-data
+
 EXPOSE 3000
-CMD ["/app/target/release/ptrans-data"]
+CMD ["ptrans-data"]
