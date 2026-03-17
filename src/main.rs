@@ -34,8 +34,10 @@ struct AppState {
 
 #[tokio::main]
 async fn main() {
+    println!("before dotenv");
     dotenv().ok();
 
+    println!("before registering trace");
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
@@ -45,6 +47,7 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
+    println!("before getting wl stations");
     let stations = match wl::get_stations().await {
         Ok(s) => s,
         Err(e) => {
@@ -53,8 +56,10 @@ async fn main() {
         }
     };
 
+    println!("before getting database url env");
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
+    println!("before connecting to maria db");
     let pool = MySqlPool::connect(&database_url)
         .await
         .expect("Failed to connect to MariaDB");
