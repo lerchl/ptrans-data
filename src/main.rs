@@ -45,6 +45,9 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
+    let port = env::var("PORT").expect("PORT must be set");
+    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+
     let stations = match wl::get_stations().await {
         Ok(s) => s,
         Err(e) => {
@@ -52,8 +55,6 @@ async fn main() {
             Vec::new()
         }
     };
-
-    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
     let pool = MySqlPool::connect(&database_url)
         .await
@@ -100,7 +101,7 @@ async fn main() {
         )
         .with_state(state);
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
+    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}")).await.unwrap();
 
     tracing::debug!("listening on {}", listener.local_addr().unwrap());
     let _ = axum::serve(listener, app).await;

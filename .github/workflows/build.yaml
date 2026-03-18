@@ -1,27 +1,15 @@
-name: Build ARM64 container image
-
+name: Build ARM64 executable
 on:
   push:
     branches:
       - main
-
 permissions:
-  contents: read
-  packages: write
-
+  contents: write
 jobs:
   build:
     runs-on: ubuntu-22.04-arm
-
     steps:
       - uses: actions/checkout@v4
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v2
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Cache Rust dependencies
         uses: actions/cache@v3
@@ -40,14 +28,20 @@ jobs:
           VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
-      - name: Build container image
-        run: |
-          docker build \
-            -t ghcr.io/${{ github.repository_owner }}/ptrans-data:${{ env.VERSION }} \
-            -t ghcr.io/${{ github.repository_owner }}/ptrans-data:latest \
-            -f Containerfile .
+      - name: Build release binary
+        env:
+          SQLX_OFFLINE: true
+        run: cargo build --release
 
-      - name: Push container images
+      - name: Rename binary
         run: |
-          docker push ghcr.io/${{ github.repository_owner }}/ptrans-data:${{ env.VERSION }}
-          docker push ghcr.io/${{ github.repository_owner }}/ptrans-data:latest
+          cp target/release/ptrans-data ptrans-data-aarch64
+
+      - name: Create GitHub Release and upload binary
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION }}
+          name: v${{ env.VERSION }}
+          files: ptrans-data-aarch64
+          make_latest: true
+          overwrite: true
