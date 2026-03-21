@@ -1,4 +1,5 @@
 name: Build ARM64 executable
+
 on:
   push:
     branches:
@@ -35,13 +36,13 @@ jobs:
 
       - name: Rename binary
         run: |
-          cp target/release/ptrans-data ptrans-data-aarch64
+          cp target/release/ptrans-data ptrans-data-linux-aarch64
 
       - name: Create GitHub Release and upload binary
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ env.VERSION }}
           name: v${{ env.VERSION }}
-          files: ptrans-data-aarch64
+          files: ptrans-data-linux-aarch64
           make_latest: true
           overwrite: true
