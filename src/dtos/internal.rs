@@ -2,6 +2,11 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
 #[derive(Clone, Debug, Serialize)]
+pub struct VersionDto {
+    pub version: &'static str,
+}
+
+#[derive(Clone, Debug, Serialize)]
 pub struct ErrorDto {
     pub message: String,
 }
@@ -26,7 +31,7 @@ pub struct LioCreateDto {
 #[derive(Clone, Debug, Serialize)]
 pub struct TimetableDto {
     pub trips: Vec<TripDto>,
-    pub message: Option<String>
+    pub message: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -34,7 +39,7 @@ pub struct TripDto {
     pub line: String,
     pub direction: String,
     pub foot_minutes_to_station: i32,
-    pub departures: Vec<DepartureDto>
+    pub departures: Vec<DepartureDto>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -43,5 +48,5 @@ pub struct DepartureDto {
     pub countdown: i32,
     pub real_time: bool,
     pub late: bool,
-    pub traffic_jam: bool
+    pub traffic_jam: bool,
 }

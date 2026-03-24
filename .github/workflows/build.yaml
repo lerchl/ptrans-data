@@ -45,4 +45,3 @@ jobs:
           name: v${{ env.VERSION }}
           files: ptrans-data-linux-aarch64
           make_latest: true
-          overwrite: true

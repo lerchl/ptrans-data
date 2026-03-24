@@ -3,7 +3,7 @@ mod models;
 mod services;
 
 use axum::{
-    BoxError, Router,
+    BoxError, Json, Router,
     error_handling::HandleErrorLayer,
     http::StatusCode,
     routing::{delete, get},
@@ -19,6 +19,7 @@ use tower_http::{
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::{
+    dtos::internal::VersionDto,
     models::internal::Station,
     services::{
         internal::{create_lio, delete_lio, get_lio, get_timetable},
@@ -30,6 +31,12 @@ use crate::{
 struct AppState {
     pool: MySqlPool,
     stations: Vec<Station>,
+}
+
+async fn version() -> Json<VersionDto> {
+    Json(VersionDto {
+        version: env!("CARGO_PKG_VERSION"),
+    })
 }
 
 #[tokio::main]
@@ -79,6 +86,7 @@ async fn main() {
         .allow_headers(Any);
 
     let app = Router::new()
+        .route("/version", get(version))
         .route("/timetable", get(get_timetable))
         .route("/lio", get(get_lio).post(create_lio))
         .route("/lio/{id}", delete(delete_lio))
@@ -101,7 +109,9 @@ async fn main() {
         )
         .with_state(state);
 
-    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}")).await.unwrap();
+    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}"))
+        .await
+        .unwrap();
 
     tracing::debug!("listening on {}", listener.local_addr().unwrap());
     let _ = axum::serve(listener, app).await;
