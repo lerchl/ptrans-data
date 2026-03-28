@@ -44,7 +44,7 @@ pub async fn fetch_trips_for_lios(lios: &Vec<&IntervalLio>) -> Vec<TripDto> {
     for id in ids {
         let Ok(response) = Client::new()
             .get(format!(
-                "https://oebb.macistry.com/api/stops/{}/departures",
+                "https://oebb.macistry.com/api/stops/{}/departures?duration=120&results=20",
                 id
             ))
             .send()
