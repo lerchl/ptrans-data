@@ -332,11 +332,18 @@ pub async fn get_timetable(
         };
     });
 
+    let message = if !wl_lios.is_empty() {
+        let wl_message = wl::fetch_traffic_info_for_lios(&wl_lios).await;
+        (!wl_message.is_empty()).then_some(wl_message)
+    } else {
+        None
+    };
+
     Ok((
         StatusCode::OK,
         Json(TimetableDto {
             trips: trips,
-            message: None,
+            message: message,
         }),
     ))
 }
