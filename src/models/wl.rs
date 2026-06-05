@@ -1,5 +1,7 @@
 use serde::Deserialize;
 
+// Stations
+
 #[derive(Debug, Deserialize)]
 pub struct StationCsvRow {
     #[serde(rename = "DIVA")]
@@ -8,13 +10,15 @@ pub struct StationCsvRow {
     pub platform_text: String,
 }
 
+// Monitor
+
 #[derive(Debug, Deserialize)]
 pub struct MonitorResponse {
-    pub data: Data,
+    pub data: MonitorData,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct Data {
+pub struct MonitorData {
     pub monitors: Vec<Monitor>,
 }
 
@@ -58,4 +62,24 @@ pub struct Vehicle {
     pub realtime_supported: bool,
     #[serde(rename = "trafficjam")]
     pub traffic_jam: bool,
+}
+
+// Traffic info
+
+#[derive(Debug, Deserialize)]
+pub struct TrafficInfoResponse {
+    pub data: TrafficInfoData,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TrafficInfoData {
+    #[serde(rename = "trafficInfos")]
+    pub traffic_infos: Vec<TrafficInfo>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TrafficInfo {
+    #[serde(rename = "refTrafficInfoCategoryId")]
+    pub category_id: i32,
+    pub description: String,
 }

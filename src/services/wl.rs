@@ -7,7 +7,10 @@ use crate::{
     dtos::internal::{DepartureDto, TripDto},
     models::{
         internal::{IntervalLio, Station},
-        wl::{Data, Departure, Line, MonitorResponse, StationCsvRow},
+        wl::{
+            Departure, Line, MonitorData, MonitorResponse, StationCsvRow, TrafficInfoData,
+            TrafficInfoResponse,
+        },
     },
 };
 
@@ -37,9 +40,7 @@ pub async fn get_stations() -> Result<Vec<Station>, Box<dyn std::error::Error>> 
     Ok(rows)
 }
 
-pub async fn fetch_trips_for_lios(
-    lios: &Vec<&IntervalLio>,
-) -> Vec<TripDto> {
+pub async fn fetch_trips_for_lios(lios: &Vec<&IntervalLio>) -> Vec<TripDto> {
     let divas = lios
         .iter()
         .map(|l| l.provider_id.clone())
@@ -57,10 +58,10 @@ pub async fn fetch_trips_for_lios(
             .json::<MonitorResponse>()
             .await
             .unwrap_or_else(|_| MonitorResponse {
-                data: Data { monitors: vec![] },
+                data: MonitorData { monitors: vec![] },
             }),
         Err(_) => MonitorResponse {
-            data: Data { monitors: vec![] },
+            data: MonitorData { monitors: vec![] },
         },
     };
 
@@ -145,4 +146,48 @@ fn line_departure_to_departure_dto(d: &Departure) -> DepartureDto {
         late: late,
         traffic_jam: d.clone().vehicle.map(|v| v.traffic_jam).unwrap_or(false),
     }
+}
+
+pub async fn fetch_traffic_info_for_lios(lios: &Vec<&IntervalLio>) -> String {
+    let lines = lios
+        .iter()
+        .map(|l| l.line.clone())
+        .unique()
+        .collect::<Vec<String>>()
+        .join(",");
+
+    let url = format!(
+        "https://www.wienerlinien.at/ogd_realtime/trafficInfoList?relatedLine={}",
+        lines
+    );
+
+    let traffic_info_response = match Client::new().get(url).send().await {
+        Ok(response) => response
+            .json::<TrafficInfoResponse>()
+            .await
+            .unwrap_or_else(|_| TrafficInfoResponse {
+                data: TrafficInfoData {
+                    traffic_infos: vec![],
+                },
+            }),
+        Err(_) => TrafficInfoResponse {
+            data: TrafficInfoData {
+                traffic_infos: vec![],
+            },
+        },
+    };
+
+    traffic_info_response
+        .data
+        .traffic_infos
+        .iter()
+        .filter(|ti| ti.category_id > 1)
+        .map(|ti| {
+            ti.description
+                .chars()
+                .map(|c| if c.is_control() { ' ' } else { c })
+                .collect::<String>()
+        })
+        .collect::<Vec<String>>()
+        .join(" | ")
 }
