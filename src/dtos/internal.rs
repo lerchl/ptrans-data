@@ -1,3 +1,4 @@
+use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
@@ -49,4 +50,17 @@ pub struct DepartureDto {
     pub real_time: bool,
     pub late: bool,
     pub traffic_jam: bool,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct SpotifyUserViewDto {
+    pub display_name: String,
+    pub auth_expires_at: NaiveDateTime,
+    pub fully_scoped: bool,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct CurrentlyPlayingDto {
+    pub is_paused: bool,
+    pub album_cover_url: Option<String>,
 }
