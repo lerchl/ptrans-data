@@ -302,32 +302,32 @@ pub async fn get_currently_playing(
         }
     });
 
-    let results = join_all(futures).await;
+    let first = join_all(futures)
+        .await
+        .into_iter()
+        .flatten()
+        .find(|res| res.device.name == "Living Room");
 
-    let mut currently_playing_title: Option<String> = None;
-    let mut is_playing = false;
-
-    for res in results.into_iter().flatten() {
-        if res.device.name == "Living Room" {
-            is_playing = res.is_playing;
-            if let Some(item) = res.item {
-                currently_playing_title = item
-                    .album
-                    .images
-                    .iter()
-                    .filter(|i| i.width.map(|w| w >= 64).unwrap_or(true))
-                    .last()
-                    .map(|i| i.url.clone());
-            }
-            break;
-        }
+    match first {
+        Some(player_response) => Ok((
+            StatusCode::OK,
+            Json(CurrentlyPlayingDto {
+                is_paused: !player_response.is_playing,
+                album_cover_url: player_response.item.and_then(|i| {
+                    i.album
+                        .images
+                        .iter()
+                        .filter(|i| i.width.map(|w| w >= 64).unwrap_or(true))
+                        .last()
+                        .map(|i| i.url.clone())
+                }),
+            }),
+        )),
+        None => Err((
+            StatusCode::NOT_FOUND,
+            Json(ErrorDto {
+                message: "Nothing currently playing on 'Living Room'".to_string(),
+            }),
+        )),
     }
-
-    Ok((
-        StatusCode::OK,
-        Json(CurrentlyPlayingDto {
-            is_paused: !is_playing,
-            album_cover_url: currently_playing_title,
-        }),
-    ))
 }
