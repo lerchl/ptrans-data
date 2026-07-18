@@ -50,3 +50,17 @@ pub struct DepartureDto {
     pub late: bool,
     pub traffic_jam: bool,
 }
+
+#[derive(Clone, Debug, Serialize)]
+pub struct SpotifyUserViewDto {
+    #[serde(rename = "displayName")]
+    pub display_name: String,
+    #[serde(rename = "requiresReAuth")]
+    pub requires_re_auth: bool,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct CurrentlyPlayingDto {
+    pub is_paused: bool,
+    pub album_cover_url: Option<String>,
+}

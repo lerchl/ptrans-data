@@ -10,12 +10,9 @@ use crate::{
     },
 };
 
-pub async fn fetch_stations(name: String) -> Result<Vec<Station>, reqwest::Error> {
+pub async fn fetch_stations(api_url: String, name: String) -> Result<Vec<Station>, reqwest::Error> {
     let resp = Client::new()
-        .get(format!(
-            "https://oebb.macistry.com/api/locations?query={}",
-            name
-        ))
+        .get(format!("{}/api/locations?query={}", api_url, name))
         .send()
         .await?
         .json::<Vec<Location>>()
@@ -32,7 +29,7 @@ pub async fn fetch_stations(name: String) -> Result<Vec<Station>, reqwest::Error
         .collect::<Vec<Station>>())
 }
 
-pub async fn fetch_trips_for_lios(lios: &Vec<&IntervalLio>) -> Vec<TripDto> {
+pub async fn fetch_trips_for_lios(api_url: String, lios: &Vec<&IntervalLio>) -> Vec<TripDto> {
     let ids = lios
         .iter()
         .map(|l| l.provider_id.clone())
@@ -44,8 +41,8 @@ pub async fn fetch_trips_for_lios(lios: &Vec<&IntervalLio>) -> Vec<TripDto> {
     for id in ids {
         let Ok(response) = Client::new()
             .get(format!(
-                "https://oebb.macistry.com/api/stops/{}/departures?duration=120&results=20",
-                id
+                "{}/api/stops/{}/departures?duration=120&results=20",
+                api_url, id
             ))
             .send()
             .await
@@ -69,16 +66,14 @@ pub async fn fetch_trips_for_lios(lios: &Vec<&IntervalLio>) -> Vec<TripDto> {
 }
 
 pub async fn fetch_depatures_for_stations(
+    api_url: String,
     ids: Vec<String>,
 ) -> Result<Vec<Departure>, reqwest::Error> {
     let mut departures: Vec<Departure> = Vec::new();
 
-    for ele in ids {
+    for id in ids {
         Client::new()
-            .get(format!(
-                "https://oebb.macistry.com/api/stops/{}/departures",
-                ele
-            ))
+            .get(format!("{}/api/stops/{}/departures", api_url, id))
             .send()
             .await?
             .json::<Departures>()

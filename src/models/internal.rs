@@ -1,3 +1,4 @@
+use chrono::NaiveDateTime;
 use sqlx::FromRow;
 
 #[derive(Clone, Debug)]
@@ -13,4 +14,21 @@ pub struct IntervalLio {
     pub provider_id: String,
     pub line: String,
     pub direction: String,
+}
+
+#[derive(Debug, Clone, FromRow)]
+pub struct SpotifyUserView {
+    pub display_name: String,
+    pub scopes: String,
+    pub authorization_revoked: bool,
+}
+
+#[derive(Debug, Clone, FromRow)]
+pub struct SpotifyTokenView {
+    pub user_id: String,
+    pub access_token: String,
+    pub refresh_token: String,
+    pub expires_at: NaiveDateTime,
+    pub scopes: String,
+    pub authorization_revoked: bool,
 }

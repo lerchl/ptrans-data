@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "UPDATE spotify_users SET authorization_revoked = TRUE WHERE user_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "67dcb2d2812f3024dcf2c55f3f00980384f178d00eefcab6c520d7703ebc0642"
+}

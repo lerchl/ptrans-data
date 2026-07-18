@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "\n                INSERT INTO spotify_users (\n                    user_id, display_name, access_token, refresh_token, expires_at, scopes\n                ) VALUES (?, ?, ?, ?, ?, ?)\n                    ON DUPLICATE KEY UPDATE\n                    display_name = VALUES(display_name),\n                    access_token = VALUES(access_token),\n                    refresh_token = VALUES(refresh_token),\n                    expires_at = VALUES(expires_at),\n                    scopes = VALUES(scopes),\n                    authorization_revoked = FALSE",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "892e4f4e2d8b08c619b88d48cd8e951a19d83cc2a5ae78960e7a938053609f39"
+}
