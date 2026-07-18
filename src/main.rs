@@ -30,9 +30,14 @@ use crate::{
 #[derive(Clone)]
 struct AppState {
     pool: MySqlPool,
+    frontend_url: String,
     stations: Vec<Station>,
+    oebb_api_url: String,
     spotify_credentials: rspotify::Credentials,
     spotify_oauth_template: rspotify::OAuth,
+    spotify_scopes: String,
+    spotify_state: String,
+    spotify_device_name: String,
 }
 
 async fn version() -> Json<VersionDto> {
@@ -57,17 +62,24 @@ async fn main() {
     let spotify_client_id = env::var("SPOTIFY_CLIENT_ID").expect("SPOTIFY_CLIENT_ID must be set");
     let spotify_client_secret =
         env::var("SPOTIFY_CLIENT_SECRET").expect("SPOTIFY_CLIENT_SECRET must be set");
+    let spotify_redirect_url =
+        env::var("SPOTIFY_REDIRECT_URL").expect("SPOTIFY_REDIRECT_URL must be set");
+    let spotify_scopes = env::var("SPOTIFY_SCOPES").expect("SPOTIFY_SCOPES must be set");
+    let spotify_state = env::var("SPOTIFY_STATE").expect("SPOTIFY_STATE must be set");
+    let spotify_device_name =
+        env::var("SPOTIFY_DEVICE_NAME").expect("SPOTIFY_DEVICE_NAME must be set");
 
     let creds = rspotify::Credentials::new(&spotify_client_id, &spotify_client_secret);
     let oauth = rspotify::OAuth {
-        redirect_uri: "http://192.168.10.24:3000/spotify/callback".to_string(),
-        scopes: rspotify::scopes!("user-read-playback-state"),
-        state: "12345678".to_string(),
+        redirect_uri: format!("{}/spotify/callback", spotify_redirect_url),
+        scopes: rspotify::scopes!(spotify_scopes),
+        state: spotify_state.clone(),
         ..Default::default()
     };
 
     let port = env::var("PORT").expect("PORT must be set");
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    let frontend_url = env::var("FRONTEND_URL").expect("FRONTEND_URL must be set");
 
     let stations = match wl::get_stations().await {
         Ok(s) => s,
@@ -89,11 +101,18 @@ async fn main() {
             panic!("Migration failed, shutting down");
         });
 
+    let oebb_api_url = env::var("OEBB_API_URL").expect("OEBB_API_URL must be set");
+
     let state = AppState {
         pool: pool.clone(),
+        frontend_url,
         stations,
+        oebb_api_url,
         spotify_credentials: creds,
         spotify_oauth_template: oauth,
+        spotify_scopes,
+        spotify_state,
+        spotify_device_name,
     };
 
     let cors = CorsLayer::new()

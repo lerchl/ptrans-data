@@ -171,7 +171,9 @@ pub async fn create_lio(
             )),
         };
     } else if input.provider.as_str() == "OEBB" {
-        let stations = oebb::fetch_stations(input.station.clone()).await.unwrap();
+        let stations = oebb::fetch_stations(app_state.oebb_api_url.clone(), input.station.clone())
+            .await
+            .unwrap();
 
         if stations.len() > 1 {
             return Err((
@@ -187,20 +189,23 @@ pub async fn create_lio(
             ));
         }
 
-        let departures = oebb::fetch_depatures_for_stations(vec![stations[0].id.clone()])
-            .await
-            .map_err(|e| {
-                println!("Error fetching departures: {}", e);
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ErrorDto {
-                        message: format!(
-                            "Failed to fetch departures from OEBB API: {}",
-                            e.to_string()
-                        ),
-                    }),
-                )
-            })?;
+        let departures = oebb::fetch_depatures_for_stations(
+            app_state.oebb_api_url.clone(),
+            vec![stations[0].id.clone()],
+        )
+        .await
+        .map_err(|e| {
+            println!("Error fetching departures: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorDto {
+                    message: format!(
+                        "Failed to fetch departures from OEBB API: {}",
+                        e.to_string()
+                    ),
+                }),
+            )
+        })?;
 
         let desired_departures = departures
             .iter()
@@ -313,7 +318,7 @@ pub async fn get_timetable(
 
     let mut trips = [
         wl::fetch_trips_for_lios(&wl_lios).await,
-        oebb::fetch_trips_for_lios(&oebb_lios).await,
+        oebb::fetch_trips_for_lios(app_state.oebb_api_url.clone(), &oebb_lios).await,
     ]
     .iter()
     .flatten()

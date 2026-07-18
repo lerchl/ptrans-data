@@ -17,20 +17,10 @@ pub struct IntervalLio {
 }
 
 #[derive(Debug, Clone, FromRow)]
-pub struct SpotifyUser {
-    pub user_id: String,
-    pub display_name: String,
-    pub access_token: String,
-    pub refresh_token: String,
-    pub expires_at: NaiveDateTime,
-    pub scopes: String,
-}
-
-#[derive(Debug, Clone, FromRow)]
 pub struct SpotifyUserView {
     pub display_name: String,
-    pub expires_at: NaiveDateTime,
     pub scopes: String,
+    pub authorization_revoked: bool,
 }
 
 #[derive(Debug, Clone, FromRow)]
@@ -40,4 +30,5 @@ pub struct SpotifyTokenView {
     pub refresh_token: String,
     pub expires_at: NaiveDateTime,
     pub scopes: String,
+    pub authorization_revoked: bool,
 }

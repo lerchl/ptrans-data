@@ -1,10 +1,11 @@
+use axum::response::IntoResponse;
 use futures::future::join_all;
 use std::collections::HashSet;
 
 use axum::{
     Json,
     extract::{Query, State},
-    response::Redirect,
+    response::{Redirect, Response},
 };
 use chrono::{DateTime, Utc};
 use reqwest::StatusCode;
@@ -27,7 +28,7 @@ pub async fn get_users(
     State(app_state): State<AppState>,
 ) -> Result<(StatusCode, Json<Vec<SpotifyUserViewDto>>), StatusCode> {
     let user_views = sqlx::query_as::<_, SpotifyUserView>(
-        "SELECT display_name, expires_at, scopes FROM spotify_users",
+        "SELECT display_name, scopes, authorization_revoked FROM spotify_users",
     )
     .fetch_all(&app_state.pool)
     .await
@@ -43,8 +44,8 @@ pub async fn get_users(
                 .iter()
                 .map(|u| SpotifyUserViewDto {
                     display_name: u.display_name.clone(),
-                    auth_expires_at: u.expires_at,
-                    fully_scoped: true,
+                    requires_re_auth: u.scopes != app_state.spotify_scopes
+                        || u.authorization_revoked,
                 })
                 .collect::<Vec<SpotifyUserViewDto>>(),
         ),
@@ -80,7 +81,7 @@ pub struct CallbackParams {
 pub async fn callback(
     Query(params): Query<CallbackParams>,
     State(app_state): State<AppState>,
-) -> Result<StatusCode, (StatusCode, Json<ErrorDto>)> {
+) -> Result<Redirect, (StatusCode, Json<ErrorDto>)> {
     let state = params.state.ok_or_else(|| {
         (
             StatusCode::BAD_GATEWAY,
@@ -90,7 +91,7 @@ pub async fn callback(
         )
     })?;
 
-    if state != "12345678" {
+    if state != app_state.spotify_state {
         return Err((
             StatusCode::FORBIDDEN,
             Json(ErrorDto {
@@ -173,7 +174,8 @@ pub async fn callback(
                     access_token = VALUES(access_token),
                     refresh_token = VALUES(refresh_token),
                     expires_at = VALUES(expires_at),
-                    scopes = VALUES(scopes)"#,
+                    scopes = VALUES(scopes),
+                    authorization_revoked = FALSE"#,
                 user.id.to_string(),
                 user.display_name,
                 token.access_token,
@@ -185,7 +187,9 @@ pub async fn callback(
             .await;
 
             match result {
-                Ok(_) => Ok(StatusCode::OK),
+                Ok(_) => Ok(Redirect::to(
+                    format!("{}?spotifyCallback", app_state.frontend_url).as_str(),
+                )),
                 Err(e) => {
                     tracing::error!("Could not add to spotify_users: {:?}", e);
                     Err((
@@ -219,9 +223,9 @@ async fn get_player_state(access_token: &str) -> Result<Option<PlayerResponse>, 
 
 pub async fn get_currently_playing(
     State(app_state): State<AppState>,
-) -> Result<(StatusCode, Json<CurrentlyPlayingDto>), (StatusCode, Json<ErrorDto>)> {
+) -> Result<Response, (StatusCode, Json<ErrorDto>)> {
     let rows = sqlx::query_as::<_, SpotifyTokenView>(
-        "SELECT user_id, access_token, refresh_token, expires_at, scopes FROM spotify_users",
+        "SELECT user_id, access_token, refresh_token, expires_at, scopes, authorization_revoked FROM spotify_users",
     )
     .fetch_all(&app_state.pool)
     .await
@@ -235,7 +239,13 @@ pub async fn get_currently_playing(
         )
     })?;
 
-    let futures = rows.into_iter().map(|row| {
+    let required_scopes: HashSet<&str> = app_state.spotify_scopes.split_whitespace().collect();
+    let auth_matches = |row: &SpotifyTokenView| {
+        let user_scopes: HashSet<&str> = row.scopes.split_whitespace().collect();
+        required_scopes.is_subset(&user_scopes) && !row.authorization_revoked
+    };
+
+    let futures = rows.into_iter().filter(auth_matches).map(|row| {
         let app_state = app_state.clone();
         async move {
             let scopes: HashSet<String> = row.scopes.split_whitespace().map(String::from).collect();
@@ -268,7 +278,31 @@ pub async fn get_currently_playing(
 
             if is_expired {
                 if let Err(e) = spotify.refresh_token().await {
-                    tracing::error!("Failed to refresh token for user {}: {:?}", row.user_id, e);
+                    let error_string = format!("{:?}", e);
+                    tracing::warn!("Failed to refresh token for user {}: {}", row.user_id, error_string);
+
+                    // HttpError is private in rspotify, so we can't match on it directly.
+                    // Its Debug output includes the response status though, e.g.
+                    // `Http(StatusCode(Response { ..., status: 400, ... }))` — a 400 here
+                    // essentially only happens when the refresh token is invalid/revoked.
+                    let is_revoked = error_string.contains("status: 400");
+
+                    if is_revoked {
+                        if let Err(db_err) = sqlx::query!(
+                            "UPDATE spotify_users SET authorization_revoked = TRUE WHERE user_id = ?",
+                            row.user_id,
+                        )
+                        .execute(&app_state.pool)
+                        .await
+                        {
+                            tracing::error!(
+                                "Failed to mark authorization revoked for user {}: {:?}",
+                                row.user_id, db_err
+                            );
+                        } else {
+                            tracing::info!("Marked authorization revoked for user {}", row.user_id);
+                        }
+                    }
                     return None;
                 }
 
@@ -306,28 +340,22 @@ pub async fn get_currently_playing(
         .await
         .into_iter()
         .flatten()
-        .find(|res| res.device.name == "Living Room");
+        .find(|res| res.device.name == app_state.spotify_device_name);
 
-    match first {
-        Some(player_response) => Ok((
-            StatusCode::OK,
-            Json(CurrentlyPlayingDto {
-                is_paused: !player_response.is_playing,
-                album_cover_url: player_response.item.and_then(|i| {
-                    i.album
-                        .images
-                        .iter()
-                        .filter(|i| i.width.map(|w| w >= 64).unwrap_or(true))
-                        .last()
-                        .map(|i| i.url.clone())
-                }),
-            }),
-        )),
-        None => Err((
-            StatusCode::NOT_FOUND,
-            Json(ErrorDto {
-                message: "Nothing currently playing on 'Living Room'".to_string(),
-            }),
-        )),
-    }
+    let dto = first.map(|player_response| CurrentlyPlayingDto {
+        is_paused: !player_response.is_playing,
+        album_cover_url: player_response.item.and_then(|i| {
+            i.album
+                .images
+                .iter()
+                .filter(|i| i.width.map(|w| w >= 64).unwrap_or(true))
+                .last()
+                .map(|i| i.url.clone())
+        }),
+    });
+
+    Ok(match dto {
+        Some(d) => (StatusCode::OK, Json(d)).into_response(),
+        None => StatusCode::NO_CONTENT.into_response(),
+    })
 }

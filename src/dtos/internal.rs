@@ -1,4 +1,3 @@
-use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
@@ -54,9 +53,10 @@ pub struct DepartureDto {
 
 #[derive(Clone, Debug, Serialize)]
 pub struct SpotifyUserViewDto {
+    #[serde(rename = "displayName")]
     pub display_name: String,
-    pub auth_expires_at: NaiveDateTime,
-    pub fully_scoped: bool,
+    #[serde(rename = "requiresReAuth")]
+    pub requires_re_auth: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]

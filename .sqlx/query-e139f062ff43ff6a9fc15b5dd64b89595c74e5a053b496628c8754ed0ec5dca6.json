@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "UPDATE spotify_users SET access_token = ?, refresh_token = ?, expires_at = ? WHERE user_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "e139f062ff43ff6a9fc15b5dd64b89595c74e5a053b496628c8754ed0ec5dca6"
+}
